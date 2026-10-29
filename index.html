@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>服務案件 KPI Dashboard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* Layout: CS 團隊週會用的營運報表。單欄、由上而下：報表抬頭 → KPI → 圖表 → 結論 → 資料與清理 → 維護 → 檔案。
+   冷灰 SaaS 配色（60-30-10）：60% 淺藍灰底 #F2F6F9＋白卡；30% 深藍黑抬頭 #232F3E 與同一藍色的深淺；10% 琥珀色只標「超過目標天數」與「待確認」。 */
+:root{
+  --paper:#f2f6f9; --card:#ffffff; --ink:#232f3e; --muted:#5a6b7d; --line:#dbe3ea; --head:#e8eef3; --band:#232f3e;
+  --teal:#2b5c8a; --teal-soft:#e2ecf5; --amber:#a86a12; --amber-soft:#fbf0dc; --grey:#a9c2da;
+  --font-body:"Noto Sans TC",system-ui,sans-serif;
+  --font-num:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.75}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--band)}
+.wrap{max-width:980px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+a{color:inherit}
+a:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+h1,h2,h3{margin:0;line-height:1.4;text-wrap:balance}
+h1{font-size:clamp(24px,4vw,34px);font-weight:700}
+h2{font-size:clamp(19px,2.6vw,23px);font-weight:700}
+h3{font-size:15px;font-weight:700}
+p{margin:0}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.sub{font-size:13px;color:var(--muted)}
+.cap{font-size:12.5px;color:var(--muted);line-height:1.6;overflow-wrap:anywhere}
+.cap .num,.prose .num{overflow-wrap:anywhere;word-break:break-all}
+.chart-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+@media (max-width:700px){.chart-scroll svg.ch{min-width:620px}}
+
+/* report header */
+header.rep{background:var(--band);color:#f2f6f9;padding-block:36px 26px}
+header.rep .meta,header.rep .lede{color:#b8c4d1}
+header.rep .meta b{color:#fff}
+header.rep nav.toc a{color:#a9c8e6}
+header.rep .disclose{background:#2c3a4b;border-color:#3b4b5e;color:#c7d1dc}
+header.rep .disclose b{color:#fff}
+header.rep a:focus-visible{outline-color:#a9c8e6}
+.meta{display:flex;flex-wrap:wrap;gap:4px 20px;font-size:13px;color:var(--muted);margin-bottom:14px}
+.meta b{color:var(--ink);font-weight:500}
+.lede{margin-top:10px;color:var(--muted);max-width:64ch}
+.disclose{margin-top:16px;font-size:13px;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:4px;padding:10px 14px;max-width:72ch}
+.disclose b{color:var(--ink);font-weight:500}
+nav.toc{display:flex;flex-wrap:wrap;gap:4px 18px;margin-top:16px;font-size:13px}
+nav.toc a{color:var(--teal);text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+
+section.part{padding-block:30px;border-bottom:1px solid var(--line);display:grid;gap:18px}
+section.part:last-of-type{border-bottom:none}
+.part-h{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.part-h .no{font-family:var(--font-num);font-size:13px;color:var(--muted)}
+.prose{max-width:68ch;display:grid;gap:12px}
+
+/* KPI cards */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpi{background:var(--card);border:1px solid transparent;box-shadow:0 1px 3px rgba(35,47,62,.08);border-radius:4px;padding:14px 16px;display:grid;gap:2px;align-content:start}
+.kpi .l{font-size:13px;color:var(--muted)}
+.kpi .v{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:30px;font-weight:500;color:var(--teal);line-height:1.2}
+.kpi .v small{font-size:16px}
+.kpi .how{font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px;border-top:1px solid var(--line);padding-top:6px}
+
+/* charts */
+.panel{background:var(--card);border:1px solid transparent;box-shadow:0 1px 3px rgba(35,47,62,.08);border-radius:4px;padding:16px;display:grid;gap:12px;min-width:0}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px}
+.legend i.ln{height:0;border-top:2px dashed var(--ink);width:14px;vertical-align:3px}
+svg.ch{width:100%;height:auto;display:block;overflow:visible}
+svg.ch text{font-family:var(--font-num);font-size:11px;fill:var(--muted)}
+svg.ch .lbl{fill:var(--ink)}
+svg.ch .nlab{fill:var(--amber)}
+.fade{opacity:0;transition:opacity .6s ease}
+.fade.in{opacity:1}
+
+/* tables */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:4px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--head);font-weight:500;font-size:12.5px;color:var(--muted)}
+tr:last-child td{border-bottom:none}
+td.r,th.r{text-align:right;font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.chip{font-family:var(--font-num);font-size:11.5px;color:var(--teal);background:var(--teal-soft);border-radius:3px;padding:1px 6px;white-space:nowrap}
+.chip.a{color:var(--amber);background:var(--amber-soft)}
+
+/* findings */
+.finding{background:var(--card);border:1px solid transparent;box-shadow:0 1px 3px rgba(35,47,62,.08);border-radius:4px;padding:16px 18px;display:grid;gap:10px}
+.finding .t{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.finding .t .no{font-family:var(--font-num);color:var(--teal);font-weight:500}
+.finding p{display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;max-width:76ch}
+.tag{font-size:11.5px;text-align:center;border-radius:3px;padding:1px 0;align-self:start;margin-top:4px}
+.t-fact{background:var(--teal-soft);color:var(--teal)}
+.t-inf{background:var(--head);color:var(--ink)}
+.t-rec{border:1px solid var(--line);color:var(--muted)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px}
+.bars{display:grid;gap:8px}
+.br{display:grid;grid-template-columns:120px minmax(0,1fr) 60px;gap:10px;align-items:center;font-size:13.5px}
+.br .b{height:12px;background:var(--head);border-radius:2px;overflow:hidden}
+.br .b span{display:block;height:100%}
+.br .n{text-align:right;font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.flag{border-left:3px solid var(--amber);background:var(--amber-soft);padding:10px 14px;font-size:14px;max-width:76ch}
+.flag .h{font-size:12px;color:var(--amber);font-weight:500;display:block}
+
+/* maintenance */
+.diff{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.diff div{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:12px 14px;display:grid;gap:2px}
+.diff .l{font-size:12.5px;color:var(--muted)}
+.diff .v{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:15px}
+.diff .v s{color:var(--muted)}
+.diff .v b{font-weight:500;color:var(--teal);font-size:20px}
+.issues{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.issue{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:14px 16px;display:grid;gap:6px;align-content:start}
+.issue .h{font-size:12px;color:var(--muted);font-family:var(--font-num)}
+
+.cta{display:flex;flex-wrap:wrap;gap:10px}
+.btn{font-size:14px;text-decoration:none;padding:9px 16px;border-radius:4px;display:inline-block}
+.btn.p{background:var(--teal);color:#fff}
+.btn.g{border:1px solid var(--line);background:var(--card)}
+footer{padding-block:18px 44px;font-size:12.5px;color:var(--muted)}
+
+@media (max-width:700px){
+  .kpis,.diff{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kpi .v{font-size:26px}
+  .br{grid-template-columns:96px minmax(0,1fr) 54px}
+  .finding p{grid-template-columns:1fr;gap:2px}
+  .tag{justify-self:start;padding:1px 8px}
+}
+@media (prefers-reduced-motion:reduce){.fade{opacity:1;transition:none}}
+</style>
+</head>
+<body>
+
+
+<header class="rep">
+  <div class="wrap">
+    <div class="meta">
+      <span>Service KPI Report</span>
+      <span>資料 <b class="num">305</b> 筆（9 週）</span>
+      <span>期間 <b class="num">2026-08-31</b> 起，截至 <b class="num">2026-10-30</b></span>
+      <span>工具 <b>Excel</b></span>
+      <span>作者 <b>Tiffany Huang</b></span>
+    </div>
+    <h1>服務案件 KPI Dashboard：從一份有錯的追蹤表，到每週可更新的 KPI dashboard</h1>
+    <p class="lede">我用 9 週、305 筆模擬的設備服務案件，在 Excel 練習 CS 團隊每週要做的事：清理團隊追蹤表、計算 KPI、找出延誤原因，並在新資料進來時正確更新。</p>
+    <p class="disclose"><b>分工說明</b>　資料為 AI 產生的模擬資料。資料清理、公式與分析由我在 Excel 完成；展示網頁以 AI 工具輔助製作。本作品為我在資料分析社學習 Excel 後的自主練習作品。</p>
+    <nav class="toc" aria-label="章節">
+      <a href="#kpi">KPI</a><a href="#charts">圖表</a><a href="#findings">分析結論</a><a href="#data">資料與清理</a><a href="#maintain">每週維護</a><a href="#files">檔案</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section class="part" id="kpi">
+  <div class="part-h"><span class="no">01</span><h2>KPI 總覽</h2></div>
+  <div class="kpis">
+    <div class="kpi"><span class="l">總案件</span><span class="v">305</span><span class="how">Cases_Tbl 的案件數，含第 9 週新增的 5 筆</span></div>
+    <div class="kpi"><span class="l">未結案件</span><span class="v">43</span><span class="how">狀態為 Open 的案件數</span></div>
+    <div class="kpi"><span class="l">準時結案率</span><span class="v">81<small>%</small></span><span class="how">準時 ÷（準時＋逾期），排除 3 筆日期待確認的案件</span></div>
+    <div class="kpi"><span class="l">平均處理天數</span><span class="v">5.2</span><span class="how">結案日 − 開案日的平均，排除 3 筆日期待確認的案件</span></div>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>KPI</th><th>定義</th></tr></thead>
+      <tbody>
+        <tr><td>每週開案數</td><td>當週開立的案件數</td></tr>
+        <tr><td>每週結案數</td><td>當週結案的案件數</td></tr>
+        <tr><td>準時結案率</td><td>依<b>結案週</b>分組。準時件數 ÷ 當週結案件數，分母排除 3 筆日期待確認的案件。目標天數：P1 2 天、P2 5 天、P3 10 天，為練習設定的假設值</td></tr>
+        <tr><td>平均處理天數</td><td>依<b>結案週</b>分組。結案日 − 開案日的平均，排除 3 筆日期待確認的案件</td></tr>
+        <tr><td>延誤案件</td><td>延誤原因欄有填值的案件，共 54 件：48 件逾期結案＋6 件已超過目標天數但尚未結案</td></tr>
+        <tr><td>未結案件數</td><td>目前狀態為 Open 的案件數</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="cap">準時結案率公式：<span class="num">=COUNTIFS(Cases_Tbl[Close_Week],E4,Cases_Tbl[On_Time],"Yes")/(COUNTIFS(…,"Yes")+COUNTIFS(…,"No"))</span></p>
+</section>
+
+<section class="part" id="charts">
+  <div class="part-h"><span class="no">02</span><h2>每週趨勢</h2></div>
+  <div class="panel">
+    <h3>每週開案數與結案數</h3>
+    <div class="legend"><span><i style="background:var(--grey)"></i>開案數</span><span><i style="background:var(--teal)"></i>結案數</span></div>
+    <div id="c1" class="fade chart-scroll"></div>
+    <p class="cap">手機上可左右滑動圖表。開案數依開案週、結案數依結案週分組。9/21 那週結案 43 件，其中 33 件是之前就開的案件。第 9 週（10/26）只有 5 筆新案件。</p>
+  </div>
+  <div class="panel">
+    <h3>每週準時結案率</h3>
+    <div class="legend"><span><i style="background:var(--teal)"></i>準時結案率</span><span><i class="ln"></i>整體平均 81%</span></div>
+    <div id="c2" class="fade chart-scroll"></div>
+    <p class="cap">依結案週分組，分母為當週結案件數，排除 3 筆日期待確認的案件。n 值標示樣本數少於 30 的週；第 9 週只有 2 件結案，準時率 100% 的樣本數太小，不與其他週比較。未設定準時率目標，虛線為整體平均，僅供參考。</p>
+  </div>
+  <div class="tbl-wrap"><table id="wk"></table></div>
+  <p class="cap">數值為加入第 9 週資料後的最新結果。準時結案率與平均處理天數依結案週分組。</p>
+</section>
+
+<section class="part" id="findings">
+  <div class="part-h"><span class="no">03</span><h2>兩個指標判斷</h2></div>
+  <p class="sub" style="max-width:72ch">以前 8 週（300 筆）為範圍。資料是模擬的，所以這裡不是營運洞察，而是示範我怎麼判斷一個數字能說明什麼、不能說明什麼。</p>
+
+  <div class="finding">
+    <div class="t"><span class="no">01</span><h3>依結案週計算會出現的偏差</h3></div>
+    <p><span class="tag t-fact">數據</span><span>9/21 那週結案 43 件，平均處理天數 6.4 天，是各週中偏高的一週。用樞紐分析表篩選後發現，這 43 件裡有 33 件是之前就開的案件。</span></p>
+    <p><span class="tag t-inf">推論</span><span>平均處理天數依結案週分組，一週內集中結掉舊案時，平均天數就會被拉高。這是計算方式造成的，不代表那週的處理效率變差；而且生成時每週的逾期機率都相同，各週起伏本來就屬於隨機波動。</span></p>
+    <p><span class="tag t-rec">學到</span><span>解讀依結案週計算的指標時，要同時看結案案件的開案時間，否則容易把計算方式的影響誤判成績效問題。</span></p>
+  </div>
+
+  <div class="panel">
+    <h3>延誤原因（54 件：48 件逾期結案＋6 件已逾期未結案）</h3>
+    <div class="bars" id="rs"></div>
+  </div>
+
+  <div class="finding">
+    <div class="t"><span class="no">02</span><h3>只算件數，看不出影響有多大</h3></div>
+    <p><span class="tag t-fact">數據</span><span>54 件延誤案件中，31 件（57%）的延誤原因是等零件。但這個比例反映的是我生成資料時的設定（等零件權重最高），不能當成真實的營運洞察。</span></p>
+    <p><span class="tag t-inf">推論</span><span>目前延誤原因只能算件數，算不出每種原因拖了多久。件數最多的原因，不一定是對準時率影響最大的原因。延誤原因也是人工填寫的欄位，分類本身可能有誤差。</span></p>
+    <p><span class="tag t-rec">建議</span><span>在追蹤表加入零件料號、預計到貨日與實際到貨日，就能計算各類原因的延誤天數，判斷哪一種對整體準時率影響最大。</span></p>
+  </div>
+
+  <div class="two">
+    <div class="panel">
+      <h3>依優先度的準時結案率</h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>優先度</th><th class="r">準時</th><th class="r">逾期</th><th class="r">準時結案率</th></tr></thead>
+          <tbody>
+            <tr><td>P1 機台停機</td><td class="r">46</td><td class="r">9</td><td class="r">84%</td></tr>
+            <tr><td>P2 效能下降</td><td class="r">89</td><td class="r">20</td><td class="r">82%</td></tr>
+            <tr><td>P3 例行／詢問</td><td class="r">76</td><td class="r">19</td><td class="r">80%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="cap">三者相差不到 5 個百分點，且生成時各優先度的逾期機率相同，所以判斷為<b>沒有明顯差異</b>，不解讀成哪個優先度表現較好。</p>
+    </div>
+    <div class="panel">
+      <h3>未結案件案齡（截至 10/30，共 43 件）</h3>
+      <div class="bars" id="age"></div>
+      <div class="flag"><span class="h">本週該優先追的案件</span>43 件未結案件中，<b>20 件已超過目標天數</b>（P1 2 件、P2 9 件、P3 9 件），最久的一件已開 20 天。</div>
+      <p class="cap">限制：第 9 週只新增了 5 筆新案件，沒有更新原本 40 件未結案的狀態，實際上有些可能已在 10/26–10/30 結案，所以舊案的案齡可能被高估。</p>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="data">
+  <div class="part-h"><span class="no">04</span><h2>資料與清理：先清理，數字才可信</h2></div>
+  <div class="prose">
+    <p><b>為什麼做：</b>我在整理 ASML 台灣實習職缺時發現，非工程職多數需要資料整理與分析能力，台南的職缺則以 Excel、Power BI、SAP 為主。其中 Cymer Customer Support 台南實習的職責寫著 KPI dashboard 維護與團隊資料管理。「維護」的重點不是做出一張漂亮的圖，而是每週新資料進來時，數字能正確、快速地更新。所以這個作品從一份充滿錯誤的追蹤表開始，一路做到可以每週更新的 dashboard。</p>
+    <p><b>資料蒐集：</b>設備服務案件屬於企業內部資料，公開管道取得不到，因此使用模擬資料。欄位依職缺描述與一般設備服務流程設計：案件編號、開案日、結案日、狀態、優先度、案件類型、客戶廠區、負責人、延誤原因。</p>
+    <p><b>資料清理：</b>原始資料保留不動，另外複製一份清理，每個修改都記錄在 Cleaning_Log。</p>
+  </div>
+
+  <h3>生成設定與生成後結果</h3>
+  <p class="sub" style="max-width:72ch">這份資料由程式產生。以下分開列出「我下的設定」和「產生之後才看到的結果」，避免把設定當成發現。</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>生成時的設定</th><th>生成後看到的結果</th></tr></thead>
+      <tbody>
+        <tr><td>300 筆案件，開案日在 8 週內隨機分布</td><td>每週開案數 30–44 件不等</td></tr>
+        <tr><td>每筆案件逾期機率 22%，各週、各優先度都相同</td><td>準時結案率 81%；P1 84%、P2 82%、P3 80%，沒有明顯差異</td></tr>
+        <tr><td>延誤原因權重：等零件 42%、等工程師 26%、等客戶 19%、升級 13%</td><td>等零件實際占 57%（31／54）</td></tr>
+        <tr><td>刻意放入 7 類、42 處資料錯誤</td><td>清理時全部找到並記錄</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="sub" style="max-width:72ch">因為逾期機率每週都一樣，各週之間的起伏屬於隨機波動，不代表真實的營運問題。這份作品用模擬資料示範的是清理、計算與維護流程，不是營運洞察。</p>
+
+  <h3>找出的 7 類資料問題，共 42 處</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>問題</th><th>怎麼找到</th><th>怎麼處理</th><th class="r">筆數</th></tr></thead>
+      <tbody>
+        <tr><td>日期存成文字，格式不一</td><td><span class="chip">ISNUMBER</span></td><td>依資料期間判斷日月順序，改成標準日期</td><td class="r">9</td></tr>
+        <tr><td>延誤原因有多種寫法</td><td><span class="chip">OR</span> 比對 4 種標準值</td><td>統一改成標準分類</td><td class="r">8</td></tr>
+        <tr><td>負責人空白</td><td>篩選（空白）</td><td>填 Unassigned，不自行推測負責人</td><td class="r">6</td></tr>
+        <tr><td>同一案件重複輸入</td><td><span class="chip">COUNTIF</span> 累計次數</td><td>確認整列相同後刪除第二筆</td><td class="r">6</td></tr>
+        <tr><td>優先度寫法不一</td><td><span class="chip">EXACT</span> <span class="chip">UPPER</span> <span class="chip">TRIM</span></td><td>改成 P1／P2／P3</td><td class="r">5</td></tr>
+        <tr><td>負責人名字多空格</td><td><span class="chip">EXACT</span> <span class="chip">TRIM</span></td><td>重新輸入正確名字</td><td class="r">5</td></tr>
+        <tr><td>結案日早於開案日</td><td>比較兩欄日期</td><td>標記待確認，計算時排除</td><td class="r"><span class="chip a">3</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="cap">檢查公式範例（找出優先度寫法不一致）：<span class="num">=EXACT(E2,UPPER(TRIM(E2)))</span></p>
+  <div class="flag"><span class="h">清理時的判斷</span>有 3 筆案件的結案日早於開案日，但看不出是哪一個日期錯。我沒有自行對調或刪除，而是新增 Data_Flag 欄位標記「待確認」：案件仍算進開案數與結案數，但不算進準時結案率與平均處理天數。清理資料的目的是讓數字可信，不是把格子填滿。</div>
+</section>
+
+<section class="part" id="maintain">
+  <div class="part-h"><span class="no">05</span><h2>每週維護：第 9 週資料進來，dashboard 會不會跟著更新？</h2></div>
+  <p class="prose">資料一開始就轉成 Excel 表格（Cases_Tbl），計算欄位與 KPI 公式都參照表格欄位。把 5 筆新案件貼在表格下方後，表格自動延伸，處理天數、準時與否、週別等欄位也自動算好。<span class="sub">（Cases_Tbl：<span class="num">A1:O301 → A1:O306</span>，貼上第 9 週 5 筆）</span></p>
+  <div class="diff">
+    <div><span class="l">總案件</span><span class="v"><s>300</s> → <b>305</b></span></div>
+    <div><span class="l">未結案件</span><span class="v"><s>40</s> → <b>43</b></span></div>
+    <div><span class="l">準時結案率</span><span class="v"><s>81.3%</s> → <b>81.5%</b></span></div>
+    <div><span class="l">平均處理天數</span><span class="v"><s>5.3</s> → <b>5.2</b></span></div>
+  </div>
+  <h3>更新時發現的兩個問題</h3>
+  <div class="issues">
+    <div class="issue">
+      <span class="h">ISSUE 01 · 圖表範圍固定（已修正）</span>
+      <b>公式會更新，圖表不會</b>
+      <p class="sub">KPI 公式與樞紐分析表（重新整理後）都正確納入新的一週，但圖表的資料範圍停在第 8 週。調整範圍後，我把週別表也轉成表格，之後新增的週會自動延伸公式並進入圖表。</p>
+    </div>
+    <div class="issue">
+      <span class="h">ISSUE 02 · 表格沿用舊公式（已修正）</span>
+      <b>兩筆新案件被誤標為待確認</b>
+      <p class="sub">貼上新資料後，第 9 週的準時率變成 0%。追查發現 Data_Flag 欄位沿用了清理時用過的檢查公式，自動在兩筆新案件填上 TRUE，導致它們被排除。清除後，第 9 週的準時率回到 100%。</p>
+    </div>
+  </div>
+  <p class="sub">這兩個問題都是實際操作更新流程才會遇到的，也是「維護」的重點：每次更新後都要回頭檢查數字合不合理。</p>
+</section>
+
+<section class="part" id="files">
+  <div class="part-h"><span class="no">06</span><h2>檔案</h2></div>
+  <div class="cta">
+    <a class="btn p" href="https://11047021-commits.github.io/service-kpi-dashboard/KPI_Dashboard.xlsx" target="_blank" rel="noopener">下載 Excel 檔，檢查每個公式</a>
+    <a class="btn g" href="https://11047021-commits.github.io/asml-internship-research/" target="_blank" rel="noopener">職缺研究：為什麼做這個作品 ↗</a>
+  </div>
+  <p class="sub">檔案使用 XLOOKUP，需以 Microsoft 365 或 Excel 2021 以上版本開啟。</p>
+</section>
+
+</main>
+<footer><div class="wrap">資料為模擬資料，僅供練習，與任何公司的實際營運無關。</div></footer>
+
+<script>
+const WEEKS=["8/31","9/7","9/14","9/21","9/28","10/5","10/12","10/19","10/26"];
+const OPEN=[30,37,40,30,41,38,44,40,5], CLOSED=[13,24,31,43,41,33,39,36,2];
+const JUDGED=[13,24,31,43,40,32,38,36,2];
+const RATE=[92,92,74,86,75,78,84,78,100], DAYS=[1.8,3.7,6.3,6.4,5.2,4.7,5.4,5.7,2.0];
+const REASONS=[["等零件",31],["等客戶",9],["等工程師",8],["升級技術支援",6]];
+const AGE=[["0–2 天",2],["3–5 天",8],["6–10 天",20],["超過 10 天",13]];
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const NS="http://www.w3.org/2000/svg";
+
+// chart 1: grouped bars
+(function(){
+  const W=900,H=240,L=34,R=8,T=16,B=26,iw=W-L-R,ih=H-T-B,max=50,n=WEEKS.length,gw=iw/n,bw=gw*0.32;
+  let s=`<svg class="ch" viewBox="0 0 ${W} ${H}" role="img" aria-label="每週開案數與結案數長條圖">`;
+  [0,10,20,30,40,50].forEach(v=>{const y=T+ih-v/max*ih; s+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="${css('--line')}"/><text x="${L-6}" y="${y+4}" text-anchor="end">${v}</text>`;});
+  WEEKS.forEach((w,i)=>{
+    const x=L+i*gw+gw/2, ho=OPEN[i]/max*ih, hc=CLOSED[i]/max*ih;
+    s+=`<rect x="${x-bw-1}" y="${T+ih-ho}" width="${bw}" height="${ho}" fill="${css('--grey')}"/>`;
+    s+=`<rect x="${x+1}" y="${T+ih-hc}" width="${bw}" height="${hc}" fill="${css('--teal')}"/>`;
+    s+=`<text x="${x-bw/2-1}" y="${T+ih-ho-4}" text-anchor="middle">${OPEN[i]}</text>`;
+    s+=`<text class="lbl" x="${x+bw/2+1}" y="${T+ih-hc-4}" text-anchor="middle">${CLOSED[i]}</text>`;
+    s+=`<text x="${x}" y="${H-8}" text-anchor="middle">${w}</text>`;
+  });
+  s+=`<line x1="${L}" x2="${W-R}" y1="${T+ih}" y2="${T+ih}" stroke="${css('--ink')}"/></svg>`;
+  document.getElementById("c1").innerHTML=s;
+})();
+
+// chart 2: on-time rate with reference line at overall average
+(function(){
+  const W=900,H=240,L=40,R=8,T=18,B=26,iw=W-L-R,ih=H-T-B,lo=60,hi=100,n=WEEKS.length,gw=iw/n,bw=gw*0.42;
+  const y=v=>T+ih-(v-lo)/(hi-lo)*ih;
+  let s=`<svg class="ch" viewBox="0 0 ${W} ${H}" role="img" aria-label="每週準時結案率長條圖，虛線為整體平均 81%">`;
+  [60,70,80,90,100].forEach(v=>{s+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="${css('--line')}"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${v}%</text>`;});
+  WEEKS.forEach((w,i)=>{
+    const x=L+i*gw+gw/2, top=y(RATE[i]);
+    s+=`<rect x="${x-bw/2}" y="${top}" width="${bw}" height="${T+ih-top}" fill="${css('--teal')}" opacity="${JUDGED[i]<30?0.45:1}"/>`;
+    s+=`<text class="lbl" x="${x}" y="${top-5}" text-anchor="middle">${RATE[i]}%</text>`;
+    if(JUDGED[i]<30) s+=`<text class="nlab" x="${x}" y="${top-18}" text-anchor="middle">n=${JUDGED[i]}</text>`;
+    s+=`<text x="${x}" y="${H-8}" text-anchor="middle">${w}</text>`;
+  });
+  s+=`<line x1="${L}" x2="${W-R}" y1="${y(81)}" y2="${y(81)}" stroke="${css('--ink')}" stroke-width="1.5" stroke-dasharray="6 4"/>`;
+  s+=`<line x1="${L}" x2="${W-R}" y1="${T+ih}" y2="${T+ih}" stroke="${css('--ink')}"/></svg>`;
+  document.getElementById("c2").innerHTML=s;
+})();
+
+document.getElementById("wk").innerHTML=`<thead><tr><th>結案週</th><th class="r">開案</th><th class="r">結案</th><th class="r">準時結案率</th><th class="r">平均處理天數</th></tr></thead><tbody>${WEEKS.map((w,i)=>`<tr><td class="num">${w}${w==="10/26"?' <span class="chip">W9・n=2</span>':""}</td><td class="r">${OPEN[i]}</td><td class="r">${CLOSED[i]}</td><td class="r">${RATE[i]}%</td><td class="r">${DAYS[i].toFixed(1)}</td></tr>`).join("")}</tbody>`;
+
+const tot=REASONS.reduce((a,r)=>a+r[1],0);
+document.getElementById("rs").innerHTML=REASONS.map(([n,v],i)=>`<div class="br"><span>${n}</span><div class="b"><span style="width:${v/31*100}%;background:${i===0?'var(--teal)':'var(--grey)'}"></span></div><span class="n">${v}・${Math.round(v/tot*100)}%</span></div>`).join("");
+document.getElementById("age").innerHTML=AGE.map(([n,v])=>`<div class="br"><span>${n}</span><div class="b"><span style="width:${v/20*100}%;background:var(--teal)"></span></div><span class="n">${v}</span></div>`).join("");
+
+// simple fade-in for charts
+const fades=[...document.querySelectorAll(".fade")];
+if("IntersectionObserver" in window){
+  const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("in");io.unobserve(e.target);}}),{threshold:0});
+  fades.forEach(f=>io.observe(f));
+} else fades.forEach(f=>f.classList.add("in"));
+setTimeout(()=>fades.forEach(f=>f.classList.add("in")),1500);
+</script>
+
+</body>
+</html>
